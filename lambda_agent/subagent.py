@@ -6,8 +6,17 @@ to perform focused tasks in parallel.  Each sub-agent gets its own Gemini chat
 session, a restricted set of tools, and a tight iteration budget.
 
 The main agent uses the ``dispatch_subagent`` tool function to fire off work.
+
+Rate-limit handling:
+- A global semaphore throttles how many sub-agents can hit the API at once.
+- Each API call is wrapped in exponential-backoff retry logic for 429 errors.
+- Concurrency is tuneable via env vars SUBAGENT_MAX_WORKERS and
+  SUBAGENT_MAX_CONCURRENT_API.
 """
 
+import os
+import time
+import random
 import threading
 from concurrent.futures import ThreadPoolExecutor, Future
 
@@ -66,6 +75,50 @@ def _get_next_id() -> int:
         current = _next_id
         _next_id += 1
         return current
+
+
+# ---------------------------------------------------------------------------
+# Rate-limit helpers
+# ---------------------------------------------------------------------------
+
+# Max sub-agents that can make an API call at the same time.
+# Lower this if you're on a free-tier key with tight RPM limits.
+_MAX_CONCURRENT_API = int(os.getenv("SUBAGENT_MAX_CONCURRENT_API", "2"))
+_api_semaphore = threading.Semaphore(_MAX_CONCURRENT_API)
+
+# Retry settings for 429 / ResourceExhausted errors
+_MAX_RETRIES = 5
+_RETRY_BASE_DELAY = 2.0  # seconds — first retry waits ~2s
+_RETRY_MAX_DELAY = 60.0  # cap so we don't wait forever
+
+
+def _is_rate_limit_error(exc: Exception) -> bool:
+    """Return True if *exc* looks like a Gemini rate-limit / quota error."""
+    msg = str(exc).lower()
+    return any(kw in msg for kw in ("429", "resource_exhausted", "rate limit", "quota"))
+
+
+def _send_with_retry(chat_session, message, agent_id: int):
+    """Send a message through the chat session with semaphore + exp backoff."""
+    for attempt in range(1, _MAX_RETRIES + 1):
+        with _api_semaphore:
+            try:
+                return chat_session.send_message(message)
+            except Exception as exc:
+                if _is_rate_limit_error(exc) and attempt < _MAX_RETRIES:
+                    delay = min(
+                        _RETRY_BASE_DELAY * (2 ** (attempt - 1)) + random.uniform(0, 1),
+                        _RETRY_MAX_DELAY,
+                    )
+                    console.print(
+                        f"  [dim yellow]⏳ sub-agent #{agent_id}: rate-limited, "
+                        f"retry {attempt}/{_MAX_RETRIES} in {delay:.1f}s[/dim yellow]"
+                    )
+                    time.sleep(delay)
+                else:
+                    raise
+    # Should not reach here, but just in case:
+    raise RuntimeError(f"sub-agent #{agent_id}: exhausted {_MAX_RETRIES} retries")
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +196,7 @@ class SubAgent:
         prompt = "".join(parts)
 
         try:
-            response = self.chat_session.send_message(prompt)
+            response = _send_with_retry(self.chat_session, prompt, self.id)
         except Exception as e:
             return f"[sub-agent {self.id}] Error on initial message: {e}"
 
@@ -183,7 +236,9 @@ class SubAgent:
                             )
                         )
 
-                    response = self.chat_session.send_message(tool_responses)
+                    response = _send_with_retry(
+                        self.chat_session, tool_responses, self.id
+                    )
                     continue
                 else:
                     # Final text response
@@ -203,7 +258,8 @@ class SubAgent:
 # ---------------------------------------------------------------------------
 
 # Thread pool for running sub-agents concurrently
-_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="subagent")
+_MAX_WORKERS = int(os.getenv("SUBAGENT_MAX_WORKERS", "4"))
+_executor = ThreadPoolExecutor(max_workers=_MAX_WORKERS, thread_name_prefix="subagent")
 
 
 def dispatch_subagent(task: str, context: str = "", tools: str = "") -> str:
