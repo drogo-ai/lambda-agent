@@ -141,7 +141,7 @@ def list_directory(path: str = ".", max_depth: int = 3, git_aware: bool = True) 
                 if len(lines) > 300:
                     return (
                         "\n".join(lines[:300])
-                         f"\n\n... and {len(lines) - 300} more files."
+                        + f"\n\n... and {len(lines) - 300} more files."
                     )
                 return "\n".join(lines)
         except Exception:
