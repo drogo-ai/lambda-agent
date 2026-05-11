@@ -12,7 +12,7 @@ google-ai-generativelanguage==0.6.15
 google-api-core==2.30.3
 google-api-python-client==2.193.0
 google-auth==2.49.2
-google-auth-httplib2==0.3.1
+google-auth-httplib2==0.4.0
 google-genai==1.73.0
 googleapis-common-protos==1.74.0
 grpcio==1.80.0
