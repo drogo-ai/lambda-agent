@@ -47,18 +47,34 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 # Default tools — the main agent can override per-task
-_DEFAULT_TOOL_NAMES = ["read_file", "search_repo", "run_command", "write_file"]
+_DEFAULT_TOOL_NAMES = [
+    "read_file",
+    "search_repo",
+    "run_command",
+    "write_file",
+    "list_directory",
+    "get_git_status",
+]
 
 
 def _get_tool_set() -> dict:
     """Lazily import tool functions from tools.py to avoid circular imports."""
-    from .tools import read_file, search_repo, run_command, write_file
+    from .tools import (
+        read_file,
+        search_repo,
+        run_command,
+        write_file,
+        list_directory,
+        get_git_status,
+    )
 
     return {
         "read_file": read_file,
         "search_repo": search_repo,
         "run_command": run_command,
         "write_file": write_file,
+        "list_directory": list_directory,
+        "get_git_status": get_git_status,
     }
 
 
