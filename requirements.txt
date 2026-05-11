@@ -25,7 +25,7 @@ identify==2.6.18
 idna==3.11
 nodeenv==1.10.0
 platformdirs==4.9.6
-pre_commit==4.5.1
+pre_commit==4.6.0
 proto-plus==1.27.2
 protobuf==7.34.1
 pyasn1==0.6.3
