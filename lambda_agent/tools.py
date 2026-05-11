@@ -125,10 +125,23 @@ def list_directory(path: str = ".", max_depth: int = 3, git_aware: bool = True) 
             ).strip()
             if tracked:
                 lines = tracked.splitlines()
+                # Enforce max_depth for git-aware output as well.
+                normalized_root = os.path.normpath(path)
+                filtered: list[str] = []
+                for p in lines:
+                    rel = (
+                        os.path.relpath(p, normalized_root)
+                        if normalized_root not in (".", "")
+                        else p
+                    )
+                    depth = rel.count(os.sep) + 1
+                    if depth <= max_depth:
+                        filtered.append(p)
+                lines = filtered
                 if len(lines) > 300:
                     return (
                         "\n".join(lines[:300])
-                        + f"\n\n... and {len(lines) - 300} more files."
+                         f"\n\n... and {len(lines) - 300} more files."
                     )
                 return "\n".join(lines)
         except Exception:
