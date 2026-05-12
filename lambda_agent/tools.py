@@ -46,6 +46,60 @@ def write_file(path: str, content: str) -> str:
         return f"Error writing to file {path}: {str(e)}"
 
 
+def search_and_replace(
+    path: str, search: str, replace: str, occurrence: int = 0
+) -> str:
+    """Searches for a specific text block in a file and replaces it with new content.
+
+    This is much more efficient than rewriting the entire file with write_file.
+    Use this when you need to modify a specific section of code without regenerating
+    the whole file.
+
+    Args:
+        path: The path to the file to modify.
+        search: The exact text block to search for (must match exactly, including whitespace and indentation).
+        replace: The replacement text to substitute in place of the search text.
+        occurrence: Which occurrence to replace (1-indexed). 0 means replace ALL occurrences. Defaults to 0.
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # Validate that the search text exists in the file
+        count = content.count(search)
+        if count == 0:
+            return (
+                f"Error: The search text was not found in {path}. "
+                "Make sure the search string matches exactly, including whitespace and indentation. "
+                "Use read_file to verify the current file contents."
+            )
+
+        if occurrence == 0:
+            # Replace all occurrences
+            new_content = content.replace(search, replace)
+            label = f"all {count} occurrence(s)" if count > 1 else "1 occurrence"
+        else:
+            if occurrence > count:
+                return (
+                    f"Error: Requested occurrence {occurrence} but only {count} "
+                    f"occurrence(s) found in {path}."
+                )
+            # Replace only the Nth occurrence
+            parts = content.split(search)
+            # Rejoin: keep first `occurrence` splits with `search`, swap one, then rest with `search`
+            before = search.join(parts[:occurrence])
+            after = search.join(parts[occurrence:])
+            new_content = before + replace + after
+            label = f"occurrence {occurrence} of {count}"
+
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+
+        return f"Successfully replaced {label} in {path}"
+    except Exception as e:
+        return f"Error during search and replace in {path}: {str(e)}"
+
+
 def run_command(command: str) -> str:
     """Executes a shell command on the host system.
 
@@ -141,7 +195,7 @@ def list_directory(path: str = ".", max_depth: int = 3, git_aware: bool = True) 
                 if len(lines) > 300:
                     return (
                         "\n".join(lines[:300])
-                         f"\n\n... and {len(lines) - 300} more files."
+                        + f"\n\n... and {len(lines) - 300} more files."
                     )
                 return "\n".join(lines)
         except Exception:
@@ -397,6 +451,7 @@ def finish_task(message: str) -> str:
 TOOL_EXECUTORS = {
     "read_file": read_file,
     "write_file": write_file,
+    "search_and_replace": search_and_replace,
     "run_command": run_command,
     "list_directory": list_directory,
     "get_git_status": get_git_status,
@@ -412,6 +467,7 @@ TOOL_EXECUTORS = {
 TOOL_FUNCTIONS = [
     read_file,
     write_file,
+    search_and_replace,
     run_command,
     list_directory,
     get_git_status,
