@@ -32,15 +32,7 @@ try:
 except ImportError:
     pass
 
-# ---------------------------------------------------------------------------
-# Shared console for sub-agent output
-# ---------------------------------------------------------------------------
-try:
-    from .spinner import console
-except ImportError:
-    from rich.console import Console
-
-    console = Console()
+from .spinner import console
 
 # ---------------------------------------------------------------------------
 # Sub-agent tool set (lazy-loaded to avoid circular imports with tools.py)
@@ -172,7 +164,7 @@ class SubAgent:
         self.id = _get_next_id()
         self.task = task
         self.context = context
-        self.model = model or "gemini-2.0-flash-lite"
+        self.model = model or config.MODEL_NAME
 
         # Resolve tool set (lazy-loaded to avoid circular imports)
         all_tools = _get_tool_set()
