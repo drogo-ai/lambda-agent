@@ -32,15 +32,7 @@ try:
 except ImportError:
     pass
 
-# ---------------------------------------------------------------------------
-# Shared console for sub-agent output
-# ---------------------------------------------------------------------------
-try:
-    from .spinner import console
-except ImportError:
-    from rich.console import Console
-
-    console = Console()
+from .spinner import console
 
 # ---------------------------------------------------------------------------
 # Sub-agent tool set (lazy-loaded to avoid circular imports with tools.py)

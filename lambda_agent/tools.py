@@ -5,17 +5,12 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.prompt import Prompt
 from rich import box
-from rich.console import Console
 
 from .scratchpad import SCRATCHPAD_EXECUTORS, SCRATCHPAD_FUNCTIONS
 from .todo import TODO_EXECUTORS, TODO_FUNCTIONS
 from .subagent import SUBAGENT_EXECUTORS, SUBAGENT_FUNCTIONS
 
-# Use the same console as the rest of the app if available; else create one
-try:
-    from .spinner import console
-except ImportError:
-    console = Console()
+from .spinner import console
 
 
 def read_file(path: str) -> str:
