@@ -48,3 +48,4 @@ urllib3==2.6.3
 virtualenv==21.2.0
 websockets==16.0
 rich>=13.7.0
+pytest
