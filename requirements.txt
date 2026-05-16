@@ -22,10 +22,10 @@ httpcore==1.0.9
 httplib2==0.31.2
 httpx==0.28.1
 identify==2.6.18
-idna==3.11
+idna==3.14
 nodeenv==1.10.0
 platformdirs==4.9.6
-pre_commit==4.5.1
+pre_commit==4.6.0
 proto-plus==1.27.2
 protobuf==7.34.1
 pyasn1==0.6.3
@@ -44,7 +44,8 @@ tqdm==4.67.3
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 uritemplate==4.2.0
-urllib3==2.6.3
+urllib3==2.7.0
 virtualenv==21.2.3
 websockets==16.0
 rich>=13.7.0
+pytest

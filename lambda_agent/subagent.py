@@ -32,33 +32,41 @@ try:
 except ImportError:
     pass
 
-# ---------------------------------------------------------------------------
-# Shared console for sub-agent output
-# ---------------------------------------------------------------------------
-try:
-    from .spinner import console
-except ImportError:
-    from rich.console import Console
-
-    console = Console()
+from .spinner import console
 
 # ---------------------------------------------------------------------------
 # Sub-agent tool set (lazy-loaded to avoid circular imports with tools.py)
 # ---------------------------------------------------------------------------
 
 # Default tools — the main agent can override per-task
-_DEFAULT_TOOL_NAMES = ["read_file", "search_repo", "run_command", "write_file"]
+_DEFAULT_TOOL_NAMES = [
+    "read_file",
+    "search_repo",
+    "run_command",
+    "write_file",
+    "list_directory",
+    "get_git_status",
+]
 
 
 def _get_tool_set() -> dict:
     """Lazily import tool functions from tools.py to avoid circular imports."""
-    from .tools import read_file, search_repo, run_command, write_file
+    from .tools import (
+        read_file,
+        search_repo,
+        run_command,
+        write_file,
+        list_directory,
+        get_git_status,
+    )
 
     return {
         "read_file": read_file,
         "search_repo": search_repo,
         "run_command": run_command,
         "write_file": write_file,
+        "list_directory": list_directory,
+        "get_git_status": get_git_status,
     }
 
 
@@ -156,7 +164,7 @@ class SubAgent:
         self.id = _get_next_id()
         self.task = task
         self.context = context
-        self.model = model or "gemini-2.0-flash-lite"
+        self.model = model or config.MODEL_NAME
 
         # Resolve tool set (lazy-loaded to avoid circular imports)
         all_tools = _get_tool_set()

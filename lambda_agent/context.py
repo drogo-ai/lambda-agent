@@ -81,7 +81,7 @@ class Transcript:
 
 # Default tier settings
 TIER1_COUNT = 4  # most recent N tool responses
-TIER1_LIMIT = 500  # chars to keep
+TIER1_LIMIT = None  # chars to keep (None means do not truncate)
 
 TIER2_COUNT = 8  # next N tool responses
 TIER2_LIMIT = 180
@@ -92,7 +92,7 @@ TIER3_LIMIT = 80  # everything older
 def trim_chat_history(
     history: list,
     tier1_count: int = TIER1_COUNT,
-    tier1_limit: int = TIER1_LIMIT,
+    tier1_limit: int | None = TIER1_LIMIT,
     tier2_count: int = TIER2_COUNT,
     tier2_limit: int = TIER2_LIMIT,
     tier3_limit: int = TIER3_LIMIT,
@@ -137,4 +137,5 @@ def trim_chat_history(
         else:
             limit = tier3_limit
 
-        resp["result"] = clip(original, limit)
+        if limit is not None:
+            resp["result"] = clip(original, limit)
