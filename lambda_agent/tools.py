@@ -430,6 +430,36 @@ def ask_user(question: str) -> str:
         return f"Error asking user: {str(e)}"
 
 
+def request_plan_approval(plan_summary: str) -> str:
+    """Presents the proposed implementation plan to the user for review.
+
+    Use this tool immediately after writing a plan to the todo list to get user approval.
+    The user can approve it or suggest edits. Do not proceed with execution until the user approves.
+
+    Args:
+        plan_summary: A concise bulleted list summary of the proposed plan to display to the user.
+    """
+    try:
+        console.print()
+        console.print(
+            Panel(
+                Text(plan_summary, style="white"),
+                border_style="cyan",
+                box=box.ROUNDED,
+                title=Text(" 📝 Proposed Plan ", style="bold black on cyan"),
+                title_align="left",
+                padding=(1, 2),
+            )
+        )
+        answer = Prompt.ask(
+            "[bold cyan]Does this look good? (yes to proceed, or provide edits)[/bold cyan]",
+            console=console,
+        )
+        return answer
+    except Exception as e:
+        return f"Error requesting approval: {str(e)}"
+
+
 def finish_task(message: str) -> str:
     """Explicitly mark a task as fully complete and return the final message to the user.
 
@@ -452,6 +482,7 @@ TOOL_EXECUTORS = {
     "get_git_status": get_git_status,
     "search_repo": search_repo,
     "ask_user": ask_user,
+    "request_plan_approval": request_plan_approval,
     "finish_task": finish_task,
     **SCRATCHPAD_EXECUTORS,
     **TODO_EXECUTORS,
@@ -468,6 +499,7 @@ TOOL_FUNCTIONS = [
     get_git_status,
     search_repo,
     ask_user,
+    request_plan_approval,
     finish_task,
     *SCRATCHPAD_FUNCTIONS,
     *TODO_FUNCTIONS,
