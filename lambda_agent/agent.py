@@ -79,7 +79,7 @@ class Agent:
             "for EVERY task (unless it is a trivial single-step question):\n"
             "1. **Plan First**: First, the agent has to make a plan in todo.md and write everything there before starting the implementation. "
             "Before executing ANY file writes or system commands, you MUST use the write_todo tool to create a comprehensive step-by-step task list and implementation plan.\n"
-            "2. **Confirm Plan**: Immediately after writing the plan, you MUST use the request_plan_approval tool to present your plan to the user and ask for their go-ahead. "
+            "2. **Confirm Plan**: Immediately after writing the plan, you MUST use the request_plan_approval tool to present a bulleted list summary of your plan to the user and ask for their go-ahead. "
             "If the user provides edits, update the plan using write_todo and ask for approval again. DO NOT proceed to implementation until the user explicitly approves.\n"
             "3. **Implement**: Execute your tools to fulfill the plan. After each major step, "
             "use update_todo to check off the step (e.g., mark as done) or log progress.\n"

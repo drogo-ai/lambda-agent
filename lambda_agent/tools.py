@@ -437,7 +437,7 @@ def request_plan_approval(plan_summary: str) -> str:
     The user can approve it or suggest edits. Do not proceed with execution until the user approves.
 
     Args:
-        plan_summary: A concise summary of the proposed plan to display to the user.
+        plan_summary: A concise bulleted list summary of the proposed plan to display to the user.
     """
     try:
         console.print()
