@@ -220,6 +220,36 @@ def handle_config_command(agent: Agent):
         console.print(f"  [yellow]⚠[/yellow] Could not save to disk: {e}")
 
 
+def _print_exit_summary(agent: Agent):
+    """Print token summary and goodbye panel on session exit."""
+    console.print()
+    if agent.token_usage.total > 0:
+        console.print(
+            Panel(
+                Text.assemble(
+                    ("Session token usage\n", "bold white"),
+                    ("  Prompt (in):      ", "dim"),
+                    (f"{agent.token_usage.prompt:>10,}\n", "cyan"),
+                    ("  Completion (out): ", "dim"),
+                    (f"{agent.token_usage.completion:>10,}\n", "cyan"),
+                    ("  Total:            ", "dim"),
+                    (f"{agent.token_usage.total:>10,}", "bold cyan"),
+                ),
+                border_style="cyan",
+                box=box.ROUNDED,
+                title="[bold cyan]⚡ Token Summary[/bold cyan]",
+                title_align="left",
+            )
+        )
+    console.print(
+        Panel(
+            "[bold cyan]Goodbye! Lambda signing off.[/bold cyan]",
+            border_style="cyan",
+            box=box.ROUNDED,
+        )
+    )
+
+
 def main():
     print_banner()
 
@@ -245,64 +275,12 @@ def main():
                     console=console,
                 )
             except KeyboardInterrupt:
-                console.print()
-                # Show session token summary before quitting
-                if agent.token_usage.total > 0:
-                    console.print(
-                        Panel(
-                            Text.assemble(
-                                ("Session token usage\n", "bold white"),
-                                ("  Prompt (in):      ", "dim"),
-                                (f"{agent.token_usage.prompt:>10,}\n", "cyan"),
-                                ("  Completion (out): ", "dim"),
-                                (f"{agent.token_usage.completion:>10,}\n", "cyan"),
-                                ("  Total:            ", "dim"),
-                                (f"{agent.token_usage.total:>10,}", "bold cyan"),
-                            ),
-                            border_style="cyan",
-                            box=box.ROUNDED,
-                            title="[bold cyan]⚡ Token Summary[/bold cyan]",
-                            title_align="left",
-                        )
-                    )
-                console.print(
-                    Panel(
-                        "[bold cyan]Goodbye! Lambda signing off.[/bold cyan]",
-                        border_style="cyan",
-                        box=box.ROUNDED,
-                    )
-                )
+                _print_exit_summary(agent)
                 break
 
             try:
                 if user_input.lower() in ["exit", "quit"]:
-                    console.print()
-                    # Show session token summary before quitting
-                    if agent.token_usage.total > 0:
-                        console.print(
-                            Panel(
-                                Text.assemble(
-                                    ("Session token usage\n", "bold white"),
-                                    ("  Prompt (in):      ", "dim"),
-                                    (f"{agent.token_usage.prompt:>10,}\n", "cyan"),
-                                    ("  Completion (out): ", "dim"),
-                                    (f"{agent.token_usage.completion:>10,}\n", "cyan"),
-                                    ("  Total:            ", "dim"),
-                                    (f"{agent.token_usage.total:>10,}", "bold cyan"),
-                                ),
-                                border_style="cyan",
-                                box=box.ROUNDED,
-                                title="[bold cyan]⚡ Token Summary[/bold cyan]",
-                                title_align="left",
-                            )
-                        )
-                    console.print(
-                        Panel(
-                            "[bold cyan]Goodbye! Lambda signing off.[/bold cyan]",
-                            border_style="cyan",
-                            box=box.ROUNDED,
-                        )
-                    )
+                    _print_exit_summary(agent)
                     break
 
                 if not user_input.strip():
