@@ -5,17 +5,12 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.prompt import Prompt
 from rich import box
-from rich.console import Console
 
 from .scratchpad import SCRATCHPAD_EXECUTORS, SCRATCHPAD_FUNCTIONS
 from .todo import TODO_EXECUTORS, TODO_FUNCTIONS
 from .subagent import SUBAGENT_EXECUTORS, SUBAGENT_FUNCTIONS
 
-# Use the same console as the rest of the app if available; else create one
-try:
-    from .spinner import console
-except ImportError:
-    console = Console()
+from .spinner import console
 
 
 def read_file(path: str) -> str:
@@ -46,6 +41,60 @@ def write_file(path: str, content: str) -> str:
         return f"Error writing to file {path}: {str(e)}"
 
 
+def search_and_replace(
+    path: str, search: str, replace: str, occurrence: int = 0
+) -> str:
+    """Searches for a specific text block in a file and replaces it with new content.
+
+    This is much more efficient than rewriting the entire file with write_file.
+    Use this when you need to modify a specific section of code without regenerating
+    the whole file.
+
+    Args:
+        path: The path to the file to modify.
+        search: The exact text block to search for (must match exactly, including whitespace and indentation).
+        replace: The replacement text to substitute in place of the search text.
+        occurrence: Which occurrence to replace (1-indexed). 0 means replace ALL occurrences. Defaults to 0.
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # Validate that the search text exists in the file
+        count = content.count(search)
+        if count == 0:
+            return (
+                f"Error: The search text was not found in {path}. "
+                "Make sure the search string matches exactly, including whitespace and indentation. "
+                "Use read_file to verify the current file contents."
+            )
+
+        if occurrence == 0:
+            # Replace all occurrences
+            new_content = content.replace(search, replace)
+            label = f"all {count} occurrence(s)" if count > 1 else "1 occurrence"
+        else:
+            if occurrence > count:
+                return (
+                    f"Error: Requested occurrence {occurrence} but only {count} "
+                    f"occurrence(s) found in {path}."
+                )
+            # Replace only the Nth occurrence
+            parts = content.split(search)
+            # Rejoin: keep first `occurrence` splits with `search`, swap one, then rest with `search`
+            before = search.join(parts[:occurrence])
+            after = search.join(parts[occurrence:])
+            new_content = before + replace + after
+            label = f"occurrence {occurrence} of {count}"
+
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+
+        return f"Successfully replaced {label} in {path}"
+    except Exception as e:
+        return f"Error during search and replace in {path}: {str(e)}"
+
+
 def run_command(command: str) -> str:
     """Executes a shell command on the host system.
 
@@ -64,34 +113,218 @@ def run_command(command: str) -> str:
         return f"Error executing command: {str(e)}"
 
 
-def get_workspace_summary() -> str:
-    """Gathers git context, branch, status, recent commits, and project documentation (like README.md or rule files) to help the agent understand the whole project."""
-    summary_parts = []
+# ---------------------------------------------------------------------------
+# Dedicated directory listing tool
+# ---------------------------------------------------------------------------
 
-    # 1. Gather Git Context
+# Directories to always skip when walking the tree
+_IGNORE_DIRS = {
+    ".git",
+    "__pycache__",
+    "node_modules",
+    ".venv",
+    "venv",
+    "env",
+    ".ruff_cache",
+    "dist",
+    "build",
+    ".next",
+    ".cache",
+    ".tox",
+    ".mypy_cache",
+    ".pytest_cache",
+    "*.egg-info",
+}
+
+
+def _should_skip_dir(name: str) -> bool:
+    """Return True if a directory name matches any ignore pattern."""
+    if name in _IGNORE_DIRS:
+        return True
+    # Handle glob-style suffix patterns like *.egg-info
+    for pat in _IGNORE_DIRS:
+        if pat.startswith("*") and name.endswith(pat[1:]):
+            return True
+    return False
+
+
+def list_directory(path: str = ".", max_depth: int = 3, git_aware: bool = True) -> str:
+    """Lists directory contents as a tree structure with smart filtering.
+
+    Returns a compact, indented tree of files and directories.  By default it
+    respects .gitignore (via `git ls-files`) so the model never wastes tokens
+    on build artefacts or vendored deps.
+
+    Args:
+        path: Root directory to list (defaults to current directory '.').
+        max_depth: How many levels deep to recurse (defaults to 3).
+        git_aware: If True, use git ls-files to respect .gitignore (defaults to True).
+    """
+    abs_path = os.path.abspath(path)
+    if not os.path.isdir(abs_path):
+        return f"Error: '{path}' is not a directory."
+
+    # ---- Fast path: use git ls-files when inside a repo ----
+    if git_aware:
+        try:
+            tracked = subprocess.check_output(
+                ["git", "ls-files", "--cached", "--others", "--exclude-standard", path],
+                text=True,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+            if tracked:
+                lines = tracked.splitlines()
+                # Enforce max_depth for git-aware output as well.
+                normalized_root = os.path.normpath(path)
+                filtered: list[str] = []
+                for p in lines:
+                    rel = (
+                        os.path.relpath(p, normalized_root)
+                        if normalized_root not in (".", "")
+                        else p
+                    )
+                    depth = rel.count(os.sep) + 1
+                    if depth <= max_depth:
+                        filtered.append(p)
+                lines = filtered
+                if len(lines) > 300:
+                    return (
+                        "\n".join(lines[:300])
+                        + f"\n\n... and {len(lines) - 300} more files."
+                    )
+                return "\n".join(lines)
+        except Exception:
+            pass  # Not a git repo or git not available — fall through to manual walk
+
+    # ---- Fallback: manual os.scandir walk ----
+    output_lines: list[str] = []
+
+    def _walk(dir_path: str, prefix: str, depth: int):
+        if depth > max_depth:
+            return
+        try:
+            entries = sorted(
+                os.scandir(dir_path), key=lambda e: (not e.is_dir(), e.name.lower())
+            )
+        except PermissionError:
+            return
+
+        visible_dirs = [
+            e
+            for e in entries
+            if e.is_dir()
+            and not _should_skip_dir(e.name)
+            and not e.name.startswith(".")
+        ]
+        files = [e for e in entries if e.is_file()]
+        combined = visible_dirs + files
+
+        for i, entry in enumerate(combined):
+            is_last = i == len(combined) - 1
+            connector = "└── " if is_last else "├── "
+            suffix = "/" if entry.is_dir() else ""
+            output_lines.append(f"{prefix}{connector}{entry.name}{suffix}")
+            if entry.is_dir():
+                extension = "    " if is_last else "│   "
+                _walk(entry.path, prefix + extension, depth + 1)
+
+    _walk(abs_path, "", 1)
+    result = "\n".join(output_lines)
+    if len(result) > 4000:
+        result = result[:4000] + "\n...[TRUNCATED]"
+    return result or "Empty directory."
+
+
+# ---------------------------------------------------------------------------
+# Dedicated git status tool
+# ---------------------------------------------------------------------------
+
+
+def get_git_status(include_diff: bool = False) -> str:
+    """Returns a comprehensive git status summary in a single call.
+
+    Bundles branch name, porcelain status, and recent commits so the agent
+    does not need multiple run_command calls.
+
+    Args:
+        include_diff: If True, also include a condensed diff stat of staged and unstaged changes (defaults to False).
+    """
+    parts: list[str] = []
+
+    # Branch
     try:
         branch = subprocess.check_output(
-            ["git", "branch", "--show-current"], text=True, stderr=subprocess.STDOUT
+            ["git", "branch", "--show-current"], text=True, stderr=subprocess.DEVNULL
         ).strip()
-        status = subprocess.check_output(
-            ["git", "status", "-s"], text=True, stderr=subprocess.STDOUT
-        )
-        log = subprocess.check_output(
-            ["git", "log", "-n", "5", "--oneline"], text=True, stderr=subprocess.STDOUT
-        )
-
-        summary_parts.append(
-            f"### Git Context\n**Branch**: {branch}\n**Status**:\n{status if status else 'Clean'}\n**Recent Commits**:\n{log}"
-        )
+        parts.append(f"Branch: {branch}")
     except Exception:
-        summary_parts.append("### Git Context\nNot a git repository or git error.")
+        return "Not a git repository."
 
-    # 2. Gather Directory Structure (limited to root)
+    # Status (porcelain for compact, stable output)
     try:
-        files = os.listdir(".")
-        summary_parts.append(f"### Root Directory Files\n{', '.join(files)}")
+        status = subprocess.check_output(
+            ["git", "status", "--porcelain=v2", "--branch"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        parts.append(f"Status:\n{status}" if status else "Status: Clean working tree")
     except Exception as e:
-        summary_parts.append(f"### Directory Listing Error\n{e}")
+        parts.append(f"Status error: {e}")
+
+    # Recent commits
+    try:
+        log = subprocess.check_output(
+            ["git", "log", "-n", "5", "--oneline", "--no-decorate"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        if log:
+            parts.append(f"Recent commits:\n{log}")
+    except Exception:
+        pass
+
+    # Optional diff stat
+    if include_diff:
+        try:
+            diff = subprocess.check_output(
+                ["git", "diff", "--stat", "--no-color"],
+                text=True,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+            if diff:
+                parts.append(f"Unstaged changes:\n{diff}")
+        except Exception:
+            pass
+        try:
+            staged = subprocess.check_output(
+                ["git", "diff", "--cached", "--stat", "--no-color"],
+                text=True,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+            if staged:
+                parts.append(f"Staged changes:\n{staged}")
+        except Exception:
+            pass
+
+    return "\n\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Workspace summary (used at session start)
+# ---------------------------------------------------------------------------
+
+
+def get_workspace_summary() -> str:
+    """Gathers git context, project structure, and documentation to help the agent understand the whole project."""
+    summary_parts = []
+
+    # 1. Git context — reuse the dedicated tool
+    git_info = get_git_status()
+    summary_parts.append(f"### Git Context\n{git_info}")
+
+    # 2. Project structure — reuse the dedicated tool (depth 2 to keep it compact)
+    tree = list_directory(".", max_depth=2)
+    summary_parts.append(f"### Project Structure\n{tree}")
 
     # 3. Read important docs
     docs_to_check = [
@@ -197,6 +430,36 @@ def ask_user(question: str) -> str:
         return f"Error asking user: {str(e)}"
 
 
+def request_plan_approval(plan_summary: str) -> str:
+    """Presents the proposed implementation plan to the user for review.
+
+    Use this tool immediately after writing a plan to the todo list to get user approval.
+    The user can approve it or suggest edits. Do not proceed with execution until the user approves.
+
+    Args:
+        plan_summary: A concise bulleted list summary of the proposed plan to display to the user.
+    """
+    try:
+        console.print()
+        console.print(
+            Panel(
+                Text(plan_summary, style="white"),
+                border_style="cyan",
+                box=box.ROUNDED,
+                title=Text(" 📝 Proposed Plan ", style="bold black on cyan"),
+                title_align="left",
+                padding=(1, 2),
+            )
+        )
+        answer = Prompt.ask(
+            "[bold cyan]Does this look good? (yes to proceed, or provide edits)[/bold cyan]",
+            console=console,
+        )
+        return answer
+    except Exception as e:
+        return f"Error requesting approval: {str(e)}"
+
+
 def finish_task(message: str) -> str:
     """Explicitly mark a task as fully complete and return the final message to the user.
 
@@ -213,9 +476,13 @@ def finish_task(message: str) -> str:
 TOOL_EXECUTORS = {
     "read_file": read_file,
     "write_file": write_file,
+    "search_and_replace": search_and_replace,
     "run_command": run_command,
+    "list_directory": list_directory,
+    "get_git_status": get_git_status,
     "search_repo": search_repo,
     "ask_user": ask_user,
+    "request_plan_approval": request_plan_approval,
     "finish_task": finish_task,
     **SCRATCHPAD_EXECUTORS,
     **TODO_EXECUTORS,
@@ -226,9 +493,13 @@ TOOL_EXECUTORS = {
 TOOL_FUNCTIONS = [
     read_file,
     write_file,
+    search_and_replace,
     run_command,
+    list_directory,
+    get_git_status,
     search_repo,
     ask_user,
+    request_plan_approval,
     finish_task,
     *SCRATCHPAD_FUNCTIONS,
     *TODO_FUNCTIONS,
