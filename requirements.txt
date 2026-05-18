@@ -45,7 +45,7 @@ typing-inspection==0.4.2
 typing_extensions==4.15.0
 uritemplate==4.2.0
 urllib3==2.7.0
-virtualenv==21.2.3
+virtualenv==21.3.3
 websockets==16.0
 rich>=13.7.0
 pytest
